@@ -1,18 +1,13 @@
-# Use an official Node.js runtime base image
-FROM node:20-slim
-
-# Set the working directory inside the container
+# Stage 1: Build the React application
+FROM node:18-alpine AS build
 WORKDIR /app
-
-# Copy package management files to install dependencies first
 COPY package*.json ./
 RUN npm install
-
-# Copy the rest of your React app workspace files
 COPY . .
+RUN npm run build
 
-# Expose the port your frontend dev server uses (typically 3000)
-EXPOSE 3000
-
-# Boot up the frontend application development server
-CMD ["npm", "start"]
+# Stage 2: Serve the production build
+FROM nginx:alpine
+COPY --from=build /app/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

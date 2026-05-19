@@ -80,8 +80,12 @@ class Search_engine:
                     json.dump(data, f, indent=4)
 
     def  update_index(self, id:str, old_content:str, new_content:str):
-        old_tokens, _ = self._tokenize(old_content)
-        for token in old_tokens:
+        self.delete_file_index(old_content)
+        self.index_file(id, new_content)
+    
+    def delete_file_index(self, id:str, content:str):
+        tokens, _ = self._tokenize(content)
+        for token in tokens:
             hash = self._hash_term(token)
             with open(f"{self.index_path}/{hash}.json", "r") as f:
                 loaded_data = json.load(f)
@@ -89,7 +93,6 @@ class Search_engine:
             print(popped_data)
             with open(f"{self.index_path}/{hash}.json", "w") as f:
                 json.dump(loaded_data, f, indent=4)
-        self.index_file(id, new_content)
 
     def search_query(self, query:str):
         query_tokens, _ = self._tokenize(query, is_set=True)

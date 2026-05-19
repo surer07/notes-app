@@ -20,7 +20,6 @@ CORS(app, resources={
 })
 
 # 1. Configure RustFS S3 Connection
-# If running in Docker, change 'localhost' to the docker service name 'rustfs'
 RUSTFS_ENDPOINT = os.getenv("RUSTFS_ENDPOINT", "http://rustfs:9000")
 BUCKET_NAME = "user-notes"
 
