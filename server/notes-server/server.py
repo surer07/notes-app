@@ -40,7 +40,7 @@ if not os.path.exists(INDEX_DIR):
 
 engine = search_engine.Search_engine()
 
-JWT_SECRET = os.getenv("JWT_SECRET", "your_jwt_signing_key_here")
+ACCESS_TOKEN_SECRET = os.getenv("ACCESS_TOKEN_SECRET", "your_jwt_signing_key_here")
 
 def authenticate_token(f):
     @wraps(f)
@@ -54,7 +54,7 @@ def authenticate_token(f):
         try:
             token = auth_header.split(' ')[1]
             # Decode the token (automatically checks expiration)
-            user_data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            user_data = jwt.decode(token, ACCESS_TOKEN_SECRET, algorithms=['HS256'])
             
             # Attach the user data to the request object (similar to req.user = user)
             request.user = user_data
@@ -72,7 +72,7 @@ def authenticate_token(f):
 @authenticate_token
 def save_note():
     data = request.json
-    user_id = data.user.get('id')
+    user_id = request.user.get('id')
     note_id = data.get('note_id')
     new_content = data.get('new_content')
     old_content = data.get('old_content')
