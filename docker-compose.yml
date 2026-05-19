@@ -1,0 +1,72 @@
+services:
+  # --- DATABASE LAYER ---
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb_server
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+
+  # --- STORAGE LAYER ---
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs_server
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - RUSTFS_ROOT_USER=${RUSTFS_ROOT_USER}
+      - RUSTFS_ROOT_PASSWORD=${RUSTFS_ROOT_PASSWORD}
+    volumes:
+      - rustfs_data:/data
+
+  # --- AUTHENTICATION SERVER ---
+  auth-server:
+    build: ./server/auth-server
+    container_name: node_auth_server
+    ports:
+      - "4000:4000"
+    environment:
+      - MONGO_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/auth_db?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - mongodb
+
+  # --- MAIN NOTES BACKEND ---
+  notes-server:
+    build: ./server/notes-server
+    container_name: flask_backend
+    ports:
+      - "5000:5000"
+    environment:
+      - RUSTFS_ENDPOINT=http://rustfs:9000
+      - RUSTFS_ROOT_USER=${RUSTFS_ROOT_USER}
+      - RUSTFS_ROOT_PASSWORD=${RUSTFS_ROOT_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - AUTH_SERVER_URL=http://auth-server:4000
+    volumes:
+      - ./server/notes-server/search_indexes:/app/search_indexes
+    depends_on:
+      - rustfs
+      - auth-server
+
+  # --- FRONTEND CLIENT ---
+  client:
+    build: ./client
+    container_name: react_client
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+      - REACT_APP_AUTH_URL=http://localhost:4000
+    depends_on:
+      - notes-server
+      - auth-server
+
+volumes:
+  rustfs_data:
+  mongo_data:    # Persists your user registrations even if containers are stopped
