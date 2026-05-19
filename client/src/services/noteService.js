@@ -17,6 +17,7 @@ export const save_note = async (
                 "new_content": new_content,
                 "old_content": old_content})
         })
+        // returns message
         return response.json()
     } catch (error) {
         console.error("error saving user's notes", error)
@@ -35,6 +36,7 @@ export const get_note = async (
                 "Authorization": `Bearer ${access_token}`
             }
         })
+        //returns note_id and content
         return response.json()            
         } catch (error) {
             console.error("error getting user's data", error)
@@ -51,6 +53,7 @@ export const search_notes = async (access_token) => {
                 "Authorization": `Bearer ${access_token}`
             }
         })
+        //returns result
         return response.json()   
     } catch (error) {
         console.error("error searching index", error)
