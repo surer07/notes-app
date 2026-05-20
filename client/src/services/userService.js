@@ -1,9 +1,9 @@
-const API_BASE_URL = "http://auth-server:4000"
+const API_BASE_URL = "/api/auth/users"
 
 //takes username, email and password and creates a new user
 export const signupUser = async (username, email, password) => {
     try {
-        const response = await fetch(`${API_BASE_URL}/users`, {
+        const response = await fetch(`${API_BASE_URL}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -26,7 +26,7 @@ export const signupUser = async (username, email, password) => {
 //takes email and password and return refresh and access tokens
 export const loginUser = async (email, password) => {
     try {
-        const response = await fetch(`${API_BASE_URL}/users/login`, {
+        const response = await fetch(`${API_BASE_URL}/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -51,7 +51,7 @@ export const loginUser = async (email, password) => {
 //takes refresh token and return access token
 export const getNewToken = async () => {
     try {
-        const response = await fetch(`${API_BASE_URL}/users/token`, {
+        const response = await fetch(`${API_BASE_URL}/token`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
@@ -71,7 +71,7 @@ export const getNewToken = async () => {
 //takes refresh token and logout the user
 export const logoutUser = async () => {
     try {
-        const response = await fetch(`${API_BASE_URL}/users/logout`, {
+        const response = await fetch(`${API_BASE_URL}/logout`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'

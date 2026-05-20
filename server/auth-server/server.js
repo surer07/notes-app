@@ -25,7 +25,7 @@ app.use(express.json())
 
 //controller and routes:
 //get all users
-app.get('/api/users', async (req, res) => {
+app.get('/api/auth/users', async (req, res) => {
     try {
         const users = await User.find({}); 
         res.json(users);
@@ -35,7 +35,7 @@ app.get('/api/users', async (req, res) => {
 });
 
 //create new user
-app.post('/api/users', async (req, res) => {
+app.post('/api/auth/users', async (req, res) => {
     try {
         console.log("Backend received body:", req.body)
         const existingUser = await User.findOne({ email: req.body.email });
@@ -57,7 +57,7 @@ app.post('/api/users', async (req, res) => {
 })
 
 //takes refresh token and create a new access token
-app.post('/api/users/token', async (req, res) => {
+app.post('/api/auth/users/token', async (req, res) => {
     const refreshToken = req.cookies.refreshToken;
     // 1. Check if token was provided in the request
     if (refreshToken == null) return res.sendStatus(401);
@@ -81,7 +81,7 @@ app.post('/api/users/token', async (req, res) => {
 });
 
 //delete refresh token of currently logged in user
-app.delete('/api/users/logout', async (req, res) => {
+app.delete('/api/auth/users/logout', async (req, res) => {
     try {
         // 1. Extract the token from the request body
         const refreshToken = req.body.refreshToken;
@@ -97,7 +97,7 @@ app.delete('/api/users/logout', async (req, res) => {
 });
 
 //create access token and refresh token, as well as save the refresh token to db
-app.post('/api/users/login', async (req, res) => {
+app.post('/api/auth/users/login', async (req, res) => {
     const { email, password } = req.body;
     try {
         // 1. Find the user by email in the USER collection

@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://notes-server:5000/api"
+const API_BASE_URL = "api/notes"
 
 export const save_note = async (
     access_token, 
@@ -6,7 +6,7 @@ export const save_note = async (
     new_content, 
     old_content) => {
     try {
-        const response = await fetch(`${API_BASE_URL}/notes`, {
+        const response = await fetch(`${API_BASE_URL}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -29,7 +29,7 @@ export const get_note = async (
     access_token,
     note_id) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/notes/${note_id}`, {
+            const response = await fetch(`${API_BASE_URL}/${note_id}`, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
@@ -60,3 +60,24 @@ export const search_notes = async (access_token) => {
         throw error
     }
 }
+
+export const list_note_ids = async (token) => {
+    // 1. Pass the URL and the configuration object containing your headers
+    const response = await fetch(`${API_BASE_URL}`, {
+        method: 'GET', // Optional for GET requests, but good for clarity
+        headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    // 2. Fetch doesn't automatically throw on 4xx/5xx errors, you must check response.ok
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    // 3. Manually parse the JSON body stream (equivalent to response.data)
+    const data = await response.json();
+    return data.note_ids; 
+};

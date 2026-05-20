@@ -110,7 +110,7 @@ def get_note(note_id):
 
 
 # 5. API Route: Search Engine
-@app.route('/api/search', methods=['GET'])
+@app.route('/api/notes/search', methods=['GET'])
 @authenticate_token
 def search_notes():
     user_id = request.user.get('id')
@@ -125,5 +125,37 @@ def search_notes():
 
     return jsonify({"results": results_list})
 
+# 6. API Route: List all Note IDs for the authenticated user
+@app.route('/api/notes', methods=['GET'])
+@authenticate_token
+def list_note_ids():
+    user_id = request.user.get('id')
+    prefix = f"{user_id}/"
+    
+    try:
+        # Fetch all objects matching the user's ID folder prefix
+        response = s3_client.list_objects_v2(
+            Bucket=BUCKET_NAME,
+            Prefix=prefix
+        )
+        
+        note_ids = []
+        
+        # Check if the user actually has any files in their folder
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                key = obj['Key'] # e.g., "65f12345/my-first-note.md"
+                
+                # Strip out the 'user_id/' prefix and '.md' extension to isolate the ID
+                filename = key.replace(prefix, "")
+                if filename.endswith(".md"):
+                    note_id = filename.replace(".md", "")
+                    note_ids.append(note_id)
+                    
+        return jsonify({"note_ids": note_ids}), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

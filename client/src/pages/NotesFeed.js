@@ -4,24 +4,30 @@ import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 
 
-export const NotesFeed = () => {
-    const [noteIds, setNoteIds] = useState([]);
-    const [noteTitle, setNoteTitle] = useState("");
+const NotesFeed = () => {
+    const [access_token, set_access_token] = useState("")
+    const [noteIds, set_note_ids] = useState([]);
+    const [noteTitle, set_note_title] = useState("");
     const navigate = useNavigate(); 
 
     useEffect(() => {
         const token = localStorage.getItem('access_token');
-        
-        if (token) {
-            list_note_ids(token).then(ids => setNoteIds(ids)).catch(err => console.error(err));
+        set_access_token(token)
+
+        const fetch_note_ids = async () => {
+            if (token) {
+                await list_note_ids(token).then(ids => set_note_ids(ids)).catch(err => console.error(err));
+            }
         }
+
+        fetch_note_ids();
     }, [noteTitle]);
 
-    const openNotesEditor = (noteId) => {
+    const open_notes_editor = (noteId) => {
         navigate(`/notes/${noteId}`);
     };
 
-    const handleCreateNote = (e) => {
+    const handle_create_note = (e) => {
         e.preventDefault();
         
         if (!noteTitle.trim()) {
@@ -30,10 +36,10 @@ export const NotesFeed = () => {
         }
 
         // 3. Pass a 'new' flag along with the typed title
-        openNotesEditor('new', noteTitle);
+        open_notes_editor('new', noteTitle);
         
         // Clear input field after navigating
-        setNoteTitle("");
+        set_note_title("");
     };
 
     return (
@@ -42,21 +48,23 @@ export const NotesFeed = () => {
             <ul>
                 {noteIds.map((id) => (
                     <li key={id}>
-                        <button onClick={() => openNotesEditor(id)}>
+                        <button onClick={() => open_notes_editor(id)}>
                             Open {id}
                         </button>
                     </li>
                 ))}
             </ul>
-            <form onSubmit={handleCreateNote}>
+            <form onSubmit={handle_create_note}>
                 <input 
                     type="text" 
                     placeholder="Type note title" 
                     value={noteTitle}
-                    onChange={(e) => setNoteTitle(e.target.value)} 
+                    onChange={(e) => set_note_title(e.target.value)} 
                 />
                 <button type="submit">Create new note</button>
             </form>
         </div>
     );
 };
+
+export default NotesFeed;

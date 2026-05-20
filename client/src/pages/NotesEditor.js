@@ -4,20 +4,29 @@ import "easymde/dist/easymde.min.css";
 import { useParams } from 'react-router-dom';
 import { save_note, get_note } from "../services/noteService";
 
-export default function NotesEditor() {
+const NotesEditor = () => {
   const [access_token, set_access_token] = useState("")
   const [saved_content, set_saved_content] = useState("") 
   const [note_content, set_note_content] = useState("# Start typing your note...");
+  const [error, set_error] = useState("")
   const { noteId } = useParams();
 
-  useEffect(async () => {
-    set_access_token(localStorage.getItem('access_token'))
+  useEffect(() => {
+    const fetch_note = async () => {
+        try {
+            const token = localStorage.getItem('access_token');
+            set_access_token(token)
+            const response = await get_note(token, noteId);
+            const content = response.content || "";
+            set_saved_content(content)
+            set_note_content(content)
+        } catch (error) {
+            console.error(error);
+            set_error("Failed to load note.");
+        }
+    }
 
-    content = await get_note(access_token, noteId).content
-    set_saved_content(content)
-    set_note_content(content)
-
-  }, [])
+  }, [noteId])
 
   const onChange = (value) => {
     set_note_content(value);
@@ -25,10 +34,19 @@ export default function NotesEditor() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-
-    await save_note(access_token, noteId, note_content, saved_content)
-    set_saved_content(note_content)
+    set_error("");
+    try {
+      await save_note(
+        access_token,
+        noteId,
+        note_content,
+        saved_content
+      );
+      set_saved_content(note_content);
+    } catch (error) {
+      console.error(error);
+      set_error("Failed to save note.");
+    }
 
   }
 
@@ -37,7 +55,7 @@ export default function NotesEditor() {
         <form onSubmit={handleSubmit}>
             <h2>{noteId}</h2>
             <SimpleMdeEditor 
-            value={noteContent} 
+            value={note_content} 
             onChange={onChange} 
             />
             <button type="submit">SAVE</button>
@@ -45,3 +63,5 @@ export default function NotesEditor() {
     </div>
   );
 }
+
+export default NotesEditor
