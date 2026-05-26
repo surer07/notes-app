@@ -25,26 +25,31 @@ class Search_engine:
         self.index_path = None
         self.files_info_path = None
 
-    def _hash_term(self, term:str, length=6):
+    def _hash_term(self, term: str, length=6):
         term = term.encode('ascii', errors='ignore')
         hashed = hashlib.md5(term).hexdigest()
         return hashed[:length]
 
-    def _tokenize(self, content:str, is_set=False):
+    def _tokenize(self, content: str, is_set=False):
+        # Remove punctuation and lowercase
         mapping = str.maketrans("", "", self.punctuations)
         cleaned_text = content.translate(mapping).lower()
         tokens = cleaned_text.split()
-        min_gram = 3
-        max_gram = 6
-        terms = {}
-        for position, token in enumerate(tokens):
-            for window_length in range(min_gram, min(max_gram, len(token) + 1)):
-                gram = token[:window_length]
-                terms.setdefault(gram, set([]))
-                terms[gram].add(position)
-        return terms, len(tokens)
+        
+        # Optionally filter stopwords (not in original, but good practice)
+        # tokens = [t for t in tokens if t not in self.stopwords]
+        
+        if is_set:
+            # Return dict with dummy empty sets to keep return type (dict, int)
+            return {token: set() for token in set(tokens)}, len(tokens)
+        else:
+            # For indexing: store positions of each full word
+            terms = {}
+            for pos, token in enumerate(tokens):
+                terms.setdefault(token, set()).add(pos)
+            return terms, len(tokens)
 
-    def set_index_loc(self, dir_path:str):
+    def set_index_loc(self, dir_path: str):
         self.index_path = Path(f"{dir_path}/index")
         self.index_path.mkdir(parents=True, exist_ok=True)
         self.files_info_path = Path(f"{dir_path}/files_info")
@@ -55,74 +60,124 @@ class Search_engine:
             with open(info_file, "w") as f:
                 json.dump({}, f, indent=4)
 
-
-    def index_file(self, id:str, content:str):
-        tokens, doc_length = self._tokenize(content)
+    def index_file(self, id: str, content: str):
+        if self.index_path is None or self.files_info_path is None:
+            raise RuntimeError("Call set_index_loc first")
+        
+        # Check for duplicate indexing
         with open(f"{self.files_info_path}/files_info.json", "r") as f:
             files_info_data = json.load(f)
+        if id in files_info_data:
+            raise ValueError(f"Document '{id}' already indexed. Use update_index or delete first.")
+        
+        tokens, doc_length = self._tokenize(content)
+        
+        # Save document length
         files_info_data[id] = doc_length
         with open(f"{self.files_info_path}/files_info.json", "w") as f:
             json.dump(files_info_data, f, indent=4)
-        for token, values in tokens.items():
-            values = list(values)
-            hash = self._hash_term(token)
-            if Path(f"{self.index_path}/{hash}.json").is_file():
-                with open(f"{self.index_path}/{hash}.json", "r") as f:
+        
+        # Add to inverted index
+        for token, positions in tokens.items():
+            positions_list = list(positions)
+            token_hash = self._hash_term(token)
+            file_path = self.index_path / f"{token_hash}.json"
+            
+            if file_path.is_file():
+                with open(file_path, "r") as f:
                     loaded_data = json.load(f)
-                if token not in loaded_data:
-                    loaded_data[token] = {}
-                loaded_data[token][id] = values
-                with open(f"{self.index_path}/{hash}.json", "w") as f:
-                    json.dump(loaded_data, f, indent=4)
             else:
-                with open(f"{self.index_path}/{hash}.json", "w") as f:
-                    data = {token: {id: values}}
-                    json.dump(data, f, indent=4)
-
-    def  update_index(self, id:str, old_content:str, new_content:str):
-        self.delete_file_index(old_content)
-        self.index_file(id, new_content)
-    
-    def delete_file_index(self, id:str, content:str):
-        tokens, _ = self._tokenize(content)
-        for token in tokens:
-            hash = self._hash_term(token)
-            with open(f"{self.index_path}/{hash}.json", "r") as f:
-                loaded_data = json.load(f)
-            popped_data = loaded_data[token].pop(id)
-            print(popped_data)
-            with open(f"{self.index_path}/{hash}.json", "w") as f:
+                loaded_data = {}
+            
+            if token not in loaded_data:
+                loaded_data[token] = {}
+            loaded_data[token][id] = positions_list
+            
+            with open(file_path, "w") as f:
                 json.dump(loaded_data, f, indent=4)
 
-    def search_query(self, query:str):
-        query_tokens, _ = self._tokenize(query, is_set=True)
-        #token and files that have it
-        files_data = {}
-        files_scores = {}
+    def update_index(self, id: str, old_content: str, new_content: str):
+        self.delete_file_index(id, old_content)
+        self.index_file(id, new_content)
 
+    def delete_file_index(self, id: str, content: str):
+        if self.index_path is None:
+            raise RuntimeError("Call set_index_loc first")
+            
+        tokens, _ = self._tokenize(content)
+        for token in tokens:
+            token_hash = self._hash_term(token)
+            file_path = self.index_path / f"{token_hash}.json"
+            if not file_path.is_file():
+                continue
+                
+            with open(file_path, "r") as f:
+                loaded_data = json.load(f)
+            
+            # Remove id from this token if present
+            if token in loaded_data and id in loaded_data[token]:
+                del loaded_data[token][id]
+                
+                # Clean up empty token entry
+                if not loaded_data[token]:
+                    del loaded_data[token]
+                    
+                # Write back or delete file if empty
+                if loaded_data:
+                    with open(file_path, "w") as f:
+                        json.dump(loaded_data, f, indent=4)
+                else:
+                    file_path.unlink()  # remove empty index file
+        
+        # Remove document length from files_info
+        info_path = self.files_info_path / "files_info.json"
+        if info_path.is_file():
+            with open(info_path, "r") as f:
+                files_info = json.load(f)
+            if id in files_info:
+                del files_info[id]
+                with open(info_path, "w") as f:
+                    json.dump(files_info, f, indent=4)
+
+    def search_query(self, query: str):
+        if self.index_path is None or self.files_info_path is None:
+            raise RuntimeError("Call set_index_loc first")
+            
+        query_tokens, _ = self._tokenize(query, is_set=True)
+        files_data = {}      # token -> {id: positions}
+        files_scores = {}
+        
+        # Gather inverted entries for all query tokens
         for token in query_tokens:
-            hash = self._hash_term(token)
-            if Path(f"{self.index_path}/{hash}.json").is_file():
-                with open(f"{self.index_path}/{hash}.json", "r") as f:
+            token_hash = self._hash_term(token)
+            file_path = self.index_path / f"{token_hash}.json"
+            if file_path.is_file():
+                with open(file_path, "r") as f:
                     loaded_data = json.load(f)
                 if token in loaded_data:
                     files_data[token] = loaded_data[token]
-
+        
+        # Load document lengths
         with open(f"{self.files_info_path}/files_info.json", "r") as f:
-                files_info_data = json.load(f)
-
-        for token, files in files_data.items():
-            for id, positions in files_data[token].items():
-                doc_length = files_info_data[id]
-                tf = len(positions) / doc_length
-                idf = math.log(len(files_info_data) / len(files))  
+            files_info_data = json.load(f)
+        
+        total_docs = len(files_info_data)
+        if total_docs == 0:
+            return []
+        
+        # Compute TF-IDF for each document
+        for token, doc_dict in files_data.items():
+            # number of documents containing this token
+            doc_freq = len(doc_dict)
+            idf = math.log(total_docs / doc_freq) if doc_freq > 0 else 0
+            
+            for doc_id, positions in doc_dict.items():
+                doc_len = files_info_data.get(doc_id)
+                if doc_len is None:  # should not happen, but be safe
+                    continue
+                tf = len(positions) / doc_len
                 tf_idf = tf * idf
-                if not id in files_scores:
-                    files_scores[id] = tf_idf
-                else:
-                    files_scores[id] += tf_idf
-
+                files_scores[doc_id] = files_scores.get(doc_id, 0) + tf_idf
+        
         sorted_scores = dict(sorted(files_scores.items(), key=lambda item: item[1], reverse=True))
-
-        return sorted_scores.keys()
-                
+        return list(sorted_scores.keys())

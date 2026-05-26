@@ -2,7 +2,6 @@ services:
   # --- DATABASE LAYER ---
   mongodb:
     image: mongo:latest
-    command: mongod --bind_ip_all
     container_name: mongodb_server
     ports:
       - "27017:27017"
@@ -36,8 +35,9 @@ services:
     ports:
       - "4000:4000"
     environment:
-      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb_server:27017/auth_db?authSource=admin
+      - MONGO_URL=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/auth_db?authSource=admin
       - ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
       - PORT=4000
     depends_on:
       - mongodb
@@ -64,9 +64,6 @@ services:
     build: ./client
     ports:
       - "3000:80"
-    environment:
-      - REACT_APP_API_URL=/api/notes
-      - REACT_APP_AUTH_URL=/api/auth
     depends_on:
       - notes-server
       - auth-server

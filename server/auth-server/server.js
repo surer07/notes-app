@@ -42,22 +42,33 @@ app.post('/api/auth/users', async (req, res) => {
         if (existingUser) {
             return res.status(400).json({ message: 'Email is already registered.' });
         }
+        
         //create hashed password
         const salt = await bcrypt.genSalt()
         const hashedPassword = await bcrypt.hash(req.body.password, salt)
-        await User.create({username: req.body.username,
+        
+        // Build the payload mapping explicitly
+        const userPayload = {
+            username: req.body.username,
             email: req.body.email,
-            role: req.body.role, 
-            password: hashedPassword});
+            password: hashedPassword
+        };
+
+        // Only attach role if it is explicitly provided in the request body
+        if (req.body.role) {
+            userPayload.role = req.body.role;
+        }
+
+        await User.create(userPayload);
         res.status(201).send()
-    } catch {
+    } catch (error) {
         console.error("DATABASE REGISTRATION ERROR:", error);
         res.status(400).json({ message: error.message });
     }
 })
 
 //takes refresh token and create a new access token
-app.post('/api/auth/users/token', async (req, res) => {
+app.get('/api/auth/users/token', async (req, res) => {
     const refreshToken = req.cookies.refreshToken;
     // 1. Check if token was provided in the request
     if (refreshToken == null) return res.sendStatus(401);
@@ -69,9 +80,8 @@ app.post('/api/auth/users/token', async (req, res) => {
         // 3. Verify the JWT signature
         jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
             if (err) return res.sendStatus(403);
-            // 4. Generate new access token
-            // Note: Use user.name or user.userId depending on what you stored in the payload
-            const accessToken = generateAccessToken({ name: user.name });
+            // Ensure 'id' is preserved along with 'name'
+            const accessToken = generateAccessToken({ name: user.name, id: user.id });
             res.json({ accessToken });
         });
     } catch (error) {
@@ -83,15 +93,13 @@ app.post('/api/auth/users/token', async (req, res) => {
 //delete refresh token of currently logged in user
 app.delete('/api/auth/users/logout', async (req, res) => {
     try {
-        // 1. Extract the token from the request body
-        const refreshToken = req.body.refreshToken;
-        // 2. Remove the token from the database
-        // This ensures the token can no longer be used to generate new access tokens
-        await RefreshToken.deleteOne({ token: refreshToken });
-        // 3. Send 204 (No Content) which is the standard for successful deletion
+        const refreshToken = req.cookies.refreshToken; // Read from cookie instead of body
+        if (refreshToken) {
+            await RefreshToken.deleteOne({ token: refreshToken });
+        }
+        res.clearCookie('refreshToken'); // Clear the cookie from browser storage
         res.sendStatus(204);
     } catch (error) {
-        // Handle database errors
         res.status(500).json({ message: "Error during logout" });
     }
 });

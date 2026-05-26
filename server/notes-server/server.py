@@ -32,8 +32,21 @@ s3_client = boto3.client(
     region_name='us-east-1'
 )
 
+# --- AUTO-INITIALIZE S3 BUCKET ---
+try:
+    s3_client.head_bucket(Bucket=BUCKET_NAME)
+    print(f"S3 Bucket '{BUCKET_NAME}' verified.")
+except Exception:
+    print(f"Bucket '{BUCKET_NAME}' not found. Creating it now...")
+    try:
+        s3_client.create_bucket(Bucket=BUCKET_NAME)
+        print(f"Bucket '{BUCKET_NAME}' created successfully.")
+    except Exception as e:
+        print(f"Failed to auto-create bucket: {str(e)}")
+# ---------------------------------
+
 # 2. Configure Search Index
-INDEX_DIR = "search_indexes"
+INDEX_DIR = "/app/search_indexes"
 if not os.path.exists(INDEX_DIR):
     os.mkdir(INDEX_DIR)
 
@@ -46,16 +59,12 @@ def authenticate_token(f):
     def decorated(*args, **kwargs):
         auth_header = request.headers.get('Authorization')
         
-        # Check if header exists and starts with 'Bearer '
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({"error": "Unauthorized: Missing Token"}), 401
             
         try:
             token = auth_header.split(' ')[1]
-            # Decode the token (automatically checks expiration)
             user_data = jwt.decode(token, ACCESS_TOKEN_SECRET, algorithms=['HS256'])
-            
-            # Attach the user data to the request object (similar to req.user = user)
             request.user = user_data
             
         except jwt.ExpiredSignatureError:
@@ -66,40 +75,57 @@ def authenticate_token(f):
         return f(*args, **kwargs)
     return decorated
 
-# 3. API Route: Save Note (Write to RustFS + Index for Search)
-@app.route('/api/notes', methods=['POST'])
+# API Route: Save Note
+@app.route('/api/notes/', methods=['POST'])
 @authenticate_token
 def save_note():
-    data = request.json
+    data = request.json or {}
     user_id = request.user.get('id')
     note_id = data.get('note_id')
-    new_content = data.get('new_content')
-    old_content = data.get('old_content')
+    
+    # Handle optional content keys safely
+    new_content = data.get('new_content') or ''
+    old_content = data.get('old_content') or ''
+    
     file_key = f"{user_id}/{note_id}.md"
 
     try:
-        # Step A: Save raw markdown file to RustFS
         s3_client.put_object(
             Bucket=BUCKET_NAME,
             Key=file_key,
             Body=new_content,
             ContentType='text/markdown'
         )
-
-        engine.set_index_loc(f"./{INDEX_DIR}/user_{user_id}")
-
+        user_index_path = os.path.join(INDEX_DIR, f"user_{user_id}")
+        engine.set_index_loc(user_index_path)
         engine.update_index(note_id, old_content, new_content)
 
         return jsonify({"message": "Note saved and indexed successfully"}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# 4. API Route: Search Engine
+@app.route('/api/notes/search', methods=['GET'])
+@authenticate_token
+def search_notes():
+    user_id = request.user.get('id')
+    query_string = request.args.get('q', '')
 
-# 4. API Route: Serve View Content (For Webpage Display)
+    if not query_string:
+        return jsonify({"results": []}), 200
+
+    user_index_path = os.path.join(INDEX_DIR, f"user_{user_id}")
+    engine.set_index_loc(user_index_path)
+    results_list = engine.search_query(query_string)
+
+    return jsonify({"results": results_list})
+
+
+# 5. API Route: Serve View Content
 @app.route('/api/notes/<note_id>', methods=['GET'])
 @authenticate_token
 def get_note(note_id):
-    user_id = request.user('id')
+    user_id = request.user.get('id')
     file_key = f"{user_id}/{note_id}.md"
     try:
         response = s3_client.get_object(Bucket=BUCKET_NAME, Key=file_key)
@@ -109,44 +135,23 @@ def get_note(note_id):
         return jsonify({"error": "Note not found"}), 404
 
 
-# 5. API Route: Search Engine
-@app.route('/api/notes/search', methods=['GET'])
-@authenticate_token
-def search_notes():
-    user_id = request.user.get('id')
-    query_string = request.args.get('q')
-
-    if not query_string or not user_id:
-        return jsonify({"error": "Missing query parameter 'q' or 'user_id'"}), 400
-
-    engine.set_index_loc(f"./{INDEX_DIR}/user_{user_id}")
-
-    results_list = engine.search_query(query_string)
-
-    return jsonify({"results": results_list})
-
-# 6. API Route: List all Note IDs for the authenticated user
-@app.route('/api/notes', methods=['GET'])
+# 6. API Route: List all Note IDs
+@app.route('/api/notes/', methods=['GET'])
 @authenticate_token
 def list_note_ids():
     user_id = request.user.get('id')
     prefix = f"{user_id}/"
     
     try:
-        # Fetch all objects matching the user's ID folder prefix
         response = s3_client.list_objects_v2(
             Bucket=BUCKET_NAME,
             Prefix=prefix
         )
         
         note_ids = []
-        
-        # Check if the user actually has any files in their folder
         if 'Contents' in response:
             for obj in response['Contents']:
-                key = obj['Key'] # e.g., "65f12345/my-first-note.md"
-                
-                # Strip out the 'user_id/' prefix and '.md' extension to isolate the ID
+                key = obj['Key']
                 filename = key.replace(prefix, "")
                 if filename.endswith(".md"):
                     note_id = filename.replace(".md", "")
